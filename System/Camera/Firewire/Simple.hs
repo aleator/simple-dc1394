@@ -22,7 +22,7 @@ module System.Camera.Firewire.Simple (
                  
                   -- * Setting up the context, cameras and the transmission
                 , getCameras 
-                , getDC1394 
+                , withDC1394 
                 , startVideoTransmission 
                 , stopVideoTransmission 
                 , stopCapture 
@@ -68,7 +68,7 @@ type CameraId = C'dc1394camera_id_t
 -- | Get list of available cameras
 getCameras :: DC1394 -> IO [CameraId]
 getCameras dc = 
-            withDC1394 dc $ \c_dc ->
+            withDCPtr dc $ \c_dc ->
             alloca $ \list        -> bracket 
                (checking $ c'dc1394_camera_enumerate c_dc list)
                (\_ -> peek list >>= c'dc1394_camera_free_list)
@@ -119,7 +119,7 @@ data Camera = Camera (ForeignPtr C'dc1394camera_t)
 cameraFromID :: DC1394 -> CameraId -> IO Camera
 cameraFromID dc e = do
     let guid = c'dc1394camera_id_t'guid e
-    camera <- withDC1394 dc $ \c_dc -> c'dc1394_camera_new c_dc guid
+    camera <- withDCPtr dc $ \c_dc -> c'dc1394_camera_new c_dc guid
     when (camera==nullPtr) $ error "Could not create camera"
     Camera <$> newForeignPtr camera (c'dc1394_camera_free camera)
     -- #TODO What else should be cleaned up?
@@ -128,17 +128,19 @@ withCameraPtr (Camera fptr) op = withForeignPtr fptr op
 withCamera    (Camera fptr) op = withForeignPtr fptr (\ptr -> peek ptr >>= op)
 
 -- | DC1394 context used for creating cameras, etc.
-newtype DC1394 = DC1394 (ForeignPtr C'dc1394_t)
+newtype DC1394 = DC1394 (Ptr C'dc1394_t)
 
 -- | Create a new DC1394 context
-getDC1394 :: IO DC1394
-getDC1394 = do
-    dc <- c'dc1394_new 
-    when (dc==nullPtr) $ error "Could not get dc1394 context"
-    DC1394 <$> newForeignPtr dc (c'dc1394_free dc)
+withDC1394 :: (DC1394 -> IO a) -> IO a
+withDC1394 op = do
+    bracket 
+               (c'dc1394_new)
+               (c'dc1394_free)
+               (\dc -> when (dc==nullPtr) (error "Could not get dc1394 context")
+                       >> op (DC1394 dc)) 
 
-withDC1394 :: DC1394 -> (Ptr C'dc1394_t -> IO b) -> IO b
-withDC1394 (DC1394 fptr) op = withForeignPtr fptr op
+withDCPtr :: DC1394 -> (Ptr C'dc1394_t -> IO b) -> IO b
+withDCPtr (DC1394 ptr) op = op ptr
 
 -- | Set the video transmission on
 startVideoTransmission :: Camera -> IO ()

@@ -1,5 +1,5 @@
 Name:                simple-firewire
-Version:             0.1
+Version:             0.1.2
 Synopsis:            Simplified interface for firewire cameras
 Description:         A simplified interface for firewire cameras based on libdc1394 <http://damien.douxchamps.net/ieee1394/libdc1394/>
                      .
@@ -7,7 +7,6 @@ Description:         A simplified interface for firewire cameras based on libdc1
                      provides both plain IO based interface for
                      controlling the cameras.
                      .
-
                      .
                      The interface will most likely change in the future.
 Homepage:            https://github.com/aleator/simple-firewire
