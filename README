@@ -1,0 +1,22 @@
+About 
+===== 
+
+This is a simplified interface for firewire cameras based on
+libdc1394 <http://damien.douxchamps.net/ieee1394/libdc1394/>.  
+
+Currently CV - based images are supported with a IO based interface for
+controlling the cameras. 
+
+Plans
+-----
+
+Possible future plans include enumerator based instance and more complete functionality.
+
+Get Involved
+------------
+
+Bug reports and especially usage reports are more than welcome!
+
+Creating a complete support for even moderately sized C-library like libdc1394 involves a lot
+of labour. Making bindings themselves are simple and mechanical and require rather little 
+special skills. So, if you need some additional functionality, feel free to dig in.
