@@ -76,7 +76,7 @@ getCameras dc =
 
 -- | Grab a frame from the camera. Currently does only 640x480 RGB D8 Images.
 getFrame :: Camera -> IO (Maybe (Image RGB D8))
-getFrame camera' = alloca $ \(framePtr :: Ptr (Ptr (C'dc1394video_frame_t))) ->
+getFrame camera' = alloca $ \(framePtr :: Ptr (Ptr C'dc1394video_frame_t)) ->
                     withCameraPtr camera' $ \camera -> do
 
     mode <- getMode camera
@@ -124,7 +124,7 @@ cameraFromID dc e = do
     Camera <$> newForeignPtr camera (c'dc1394_camera_free camera)
     -- #TODO What else should be cleaned up?
 
-withCameraPtr (Camera fptr) op = withForeignPtr fptr op
+withCameraPtr (Camera fptr) = withForeignPtr fptr
 withCamera    (Camera fptr) op = withForeignPtr fptr (\ptr -> peek ptr >>= op)
 
 -- | DC1394 context used for creating cameras, etc.
@@ -132,10 +132,9 @@ newtype DC1394 = DC1394 (Ptr C'dc1394_t)
 
 -- | Create a new DC1394 context
 withDC1394 :: (DC1394 -> IO a) -> IO a
-withDC1394 op = do
-    bracket 
-               (c'dc1394_new)
-               (c'dc1394_free)
+withDC1394 op = bracket 
+               c'dc1394_new
+               c'dc1394_free
                (\dc -> when (dc==nullPtr) (error "Could not get dc1394 context")
                        >> op (DC1394 dc)) 
 
