@@ -18,6 +18,8 @@ Maintainer:          aleator@gmail.com
 Category:            Graphics, Machine Vision, System
 Build-type:          Simple
 Cabal-version:       >=1.2
+Extra-Source-Files:
+        Examples/*.hs
 
 Library
   Exposed-modules:     
@@ -26,8 +28,6 @@ Library
         base            >  4       && < 5,
         bindings-dc1394 >= 0.1     && < 1,
         CV              >= 0.3.1.2 && < 0.4
-  Extra-Source-Files:
-        Examples/*.hs
 
   -- Other-modules:       
   -- Build-tools:         
