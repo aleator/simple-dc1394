@@ -19,7 +19,7 @@ Category:            Graphics, Machine Vision, System
 Build-type:          Simple
 Cabal-version:       >=1.2
 Extra-Source-Files:
-        Examples/*.hs
+        Examples/Example1.hs
 
 Library
   Exposed-modules:     
