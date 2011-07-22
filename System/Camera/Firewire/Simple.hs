@@ -74,6 +74,21 @@ getCameras dc =
                (\_ -> peek list >>= c'dc1394_camera_free_list)
                (\_ -> peek list >>= peek >>= getIds) 
 
+-- | Stop the transmission, and poll frames until the camera buffer is empty. Notice that you
+--   have to restart the transmission after this call
+flushBuffer cam = alloca $ \(framePtrPtr :: Ptr (Ptr C'dc1394video_frame_t)) -> do
+    stopVideoTransmission cam 
+    withCameraPtr cam $ flushLoop framePtrPtr
+ where
+    flushLoop framePtrPtr cam = do
+        c'dc1394_capture_dequeue cam  c'DC1394_CAPTURE_POLICY_POLL framePtrPtr
+        framePtr <- peek framePtrPtr 
+        c'dc1394_capture_enqueue cam framePtr
+        print "Flush!"
+        when (framePtr /= nullPtr) $ flushLoop framePtrPtr cam
+
+
+
 -- | Grab a frame from the camera. Currently does only 640x480 RGB D8 Images.
 getFrame :: Camera -> IO (Maybe (Image RGB D8))
 getFrame camera' = alloca $ \(framePtr :: Ptr (Ptr C'dc1394video_frame_t)) ->

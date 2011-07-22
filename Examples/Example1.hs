@@ -64,9 +64,13 @@ main = do
     setupCamera cam 4 (defaultFlags)
     startVideoTransmission cam
     
-    run_ (saveClip cam)
-   -- getFrame cam >>= saveImage "testShot2-1.png"
-   -- getFrame cam >>= saveImage "testShot2-3.png"
+   --  run_ (saveClip cam)
+    getFrame cam >>= saveImage "testShot2-1.png"
+    getFrame cam >>= saveImage "testShot2-3.png"
+    threadDelay (1000000)
+    flushCamera cam
+    startVideoTransmission cam
+    getFrame cam >>= saveImage "testShot2-4.png"
     
     stopVideoTransmission cam
     stopCapture cam
