@@ -11,7 +11,7 @@ import Data.Array.CArray
 import Data.Array.IArray
 import Data.Bits
 import Foreign.C.Types
-import Foreign.Concurrent
+import Control.Concurrent (threadDelay)
 import Foreign.ForeignPtr hiding (newForeignPtr)
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
@@ -51,8 +51,7 @@ save = continue $ go 0
 
 saveClip c = enumCamera c $$ (E.isolate 10 =$ save)
 
-main = do
-    dc <- getDC1394 --c'dc1394_new 
+main = withDC1394 $ \dc -> do
     (e:_) <- getCameras dc
     print e
     print ("Trying camera", e)
@@ -65,12 +64,12 @@ main = do
     startVideoTransmission cam
     
    --  run_ (saveClip cam)
-    getFrame cam >>= saveImage "testShot2-1.png"
-    getFrame cam >>= saveImage "testShot2-3.png"
+    getFrame cam >>= maybe (return ()) (saveImage "testShot2-1.png")
+    getFrame cam >>= maybe (return ()) (saveImage "testShot2-3.png")
     threadDelay (1000000)
-    flushCamera cam
+    flushBuffer cam
     startVideoTransmission cam
-    getFrame cam >>= saveImage "testShot2-4.png"
+    getFrame cam >>= maybe (return ()) (saveImage "testShot2-4.png")
     
     stopVideoTransmission cam
     stopCapture cam

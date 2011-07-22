@@ -32,6 +32,7 @@ module System.Camera.Firewire.Simple (
                  
                   -- * Getting images
                 , getFrame 
+                , flushBuffer
                   -- * Various flags 
                 , DCResult(..)
                 , Framerate(..)
@@ -76,16 +77,18 @@ getCameras dc =
 
 -- | Stop the transmission, and poll frames until the camera buffer is empty. Notice that you
 --   have to restart the transmission after this call
+flushBuffer :: Camera -> IO ()
 flushBuffer cam = alloca $ \(framePtrPtr :: Ptr (Ptr C'dc1394video_frame_t)) -> do
     stopVideoTransmission cam 
     withCameraPtr cam $ flushLoop framePtrPtr
  where
     flushLoop framePtrPtr cam = do
         c'dc1394_capture_dequeue cam  c'DC1394_CAPTURE_POLICY_POLL framePtrPtr
-        framePtr <- peek framePtrPtr 
-        c'dc1394_capture_enqueue cam framePtr
         print "Flush!"
-        when (framePtr /= nullPtr) $ flushLoop framePtrPtr cam
+        framePtr  :: Ptr C'dc1394video_frame_t <- peek framePtrPtr 
+        putStrLn $ show (framePtr,framePtrPtr)
+        
+        when (framePtr /= nullPtr) $ c'dc1394_capture_enqueue cam framePtr >> flushLoop framePtrPtr cam
 
 
 
