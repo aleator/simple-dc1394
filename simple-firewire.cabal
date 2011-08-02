@@ -1,5 +1,5 @@
 Name:                simple-firewire
-Version:             0.1.3.2
+Version:             0.1.3.3
 Synopsis:            Simplified interface for firewire cameras
 Description:         A simplified interface for firewire cameras based on libdc1394 <http://damien.douxchamps.net/ieee1394/libdc1394/>
                      .

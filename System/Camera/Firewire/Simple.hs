@@ -75,11 +75,10 @@ getCameras dc =
                (\_ -> peek list >>= c'dc1394_camera_free_list)
                (\_ -> peek list >>= peek >>= getIds) 
 
--- | Stop the transmission, and poll frames until the camera buffer is empty. Notice that you
+-- | Poll frames until the camera buffer is empty. Notice that you
 --   have to restart the transmission after this call
 flushBuffer :: Camera -> IO ()
 flushBuffer cam = alloca $ \(framePtrPtr :: Ptr (Ptr C'dc1394video_frame_t)) -> do
-    stopVideoTransmission cam 
     withCameraPtr cam $ flushLoop framePtrPtr
  where
     flushLoop framePtrPtr cam = do
@@ -112,7 +111,7 @@ getFrame camera' = alloca $ \(framePtr :: Ptr (Ptr C'dc1394video_frame_t)) ->
                 case corrupt of
                     0 -> do -- Yay! A frame!
                            dataPtr <- c'dc1394video_frame_t'image <$> (peek framePtr >>= peek)
-                           r <- unsafe8UC3FromPtr (640,480) dataPtr
+                           r <- unsafe8UC_BGRFromPtr (640,480) dataPtr
                            c'dc1394_capture_enqueue camera frameP
                            return . Just $ r
                     _ -> c'dc1394_capture_enqueue camera frameP >> return Nothing
