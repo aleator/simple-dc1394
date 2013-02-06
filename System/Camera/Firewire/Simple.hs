@@ -1,4 +1,4 @@
-{-#LANGUAGE ScopedTypeVariables#-}
+{-#LANGUAGE ScopedTypeVariables, TypeFamilies, DataKinds#-}
 module System.Camera.Firewire.Simple (
                   -- * Basic types
                   Camera
@@ -17,7 +17,7 @@ module System.Camera.Firewire.Simple (
                 , cameraFromID
                 , setFrameRate 
                 , setISOSpeed 
-                , setVideoMode 
+                , withVideoMode 
                 , setupCamera 
                  
                   -- * Setting up the context, cameras and the transmission
@@ -57,6 +57,7 @@ import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
+import Unsafe.Coerce
 
 getIds :: C'dc1394camera_list_t -> IO [C'dc1394camera_id_t]
 getIds camList = peekArray (fromIntegral $ c'dc1394camera_list_t'num camList)
@@ -77,7 +78,7 @@ getCameras dc =
 
 -- | Poll frames until the camera buffer is empty. Notice that you
 --   have to restart the transmission after this call
-flushBuffer :: Camera -> IO ()
+flushBuffer :: Camera a -> IO ()
 flushBuffer cam = alloca $ \(framePtrPtr :: Ptr (Ptr C'dc1394video_frame_t)) -> do
     withCameraPtr cam $ flushLoop framePtrPtr
  where
@@ -90,15 +91,76 @@ flushBuffer cam = alloca $ \(framePtrPtr :: Ptr (Ptr C'dc1394video_frame_t)) -> 
         when (framePtr /= nullPtr) $ c'dc1394_capture_enqueue cam framePtr >> flushLoop framePtrPtr cam
 
 
+class GetFrame a where
+    type ResultImageOf a :: *
+    getFrame :: Camera a -> IO (Maybe (ResultImageOf a))
 
--- | Grab a frame from the camera. Currently does only 640x480 RGB D8 Images.
-getFrame :: Camera -> IO (Maybe (Image RGB D8))
-getFrame camera' = alloca $ \(framePtr :: Ptr (Ptr C'dc1394video_frame_t)) ->
+
+-- | Grab a frame from the camera. 
+--getFrame :: Camera -> IO (Maybe (Image RGB D8))
+instance GetFrame Mode_640x480_RGB8 where
+    type ResultImageOf Mode_640x480_RGB8 = Image RGB D8
+    getFrame camera' = getPrimalFrame camera' Mode_640x480_RGB8 convertToCVRGB 
+
+instance GetFrame Mode_800x600_RGB8 where
+    type ResultImageOf Mode_800x600_RGB8 = Image RGB D8
+    getFrame camera' = getPrimalFrame camera' Mode_800x600_RGB8 convertToCVRGB 
+
+instance GetFrame Mode_1024x768_RGB8 where
+    type ResultImageOf Mode_1024x768_RGB8 = Image RGB D8
+    getFrame camera' = getPrimalFrame camera' Mode_1024x768_RGB8 convertToCVRGB 
+
+instance GetFrame Mode_1280x960_RGB8 where
+    type ResultImageOf Mode_1280x960_RGB8 = Image RGB D8
+    getFrame camera' = getPrimalFrame camera' Mode_1280x960_RGB8 convertToCVRGB 
+
+instance GetFrame Mode_640x480_MONO8 where
+    type ResultImageOf Mode_640x480_MONO8 = Image GrayScale D8
+    getFrame camera' = getPrimalFrame camera' Mode_640x480_MONO8 convertToCVMONO8 
+
+instance GetFrame Mode_800x600_MONO8 where
+    type ResultImageOf Mode_800x600_MONO8 = Image GrayScale D8
+    getFrame camera' = getPrimalFrame camera' Mode_800x600_MONO8 convertToCVMONO8 
+
+instance GetFrame Mode_1024x768_MONO8 where
+    type ResultImageOf Mode_1024x768_MONO8 = Image GrayScale D8
+    getFrame camera' = getPrimalFrame camera' Mode_1024x768_MONO8 convertToCVMONO8
+
+instance GetFrame Mode_1280x960_MONO8 where
+    type ResultImageOf Mode_1280x960_MONO8 = Image GrayScale D8
+    getFrame camera' = getPrimalFrame camera' Mode_1280x960_MONO8 convertToCVMONO8 
+
+-- | Perform operations with a given video-mode. The idea is that each camera outside the
+--   `withVideoMode` is represented with an UnsetMode with which you can't grab frames.
+--   This is done regardless of the actual device mode. 
+class WithVideoMode a where
+    withVideoMode :: Camera UnsetMode -> (Camera a -> IO b) -> IO b
+
+instance WithVideoMode Mode_640x480_RGB8 where
+    withVideoMode cam op = withCameraPtr cam $ \camera -> 
+        (checking $ c'dc1394_video_set_mode camera (toVideoMode Mode_640x480_RGB8)) 
+            >> op (unsafeCoerce cam)
+
+instance WithVideoMode Mode_640x480_MONO8 where
+    withVideoMode cam op = withCameraPtr cam $ \camera -> 
+        (checking $ c'dc1394_video_set_mode camera (toVideoMode Mode_640x480_MONO8)) 
+            >> op (unsafeCoerce cam)
+
+instance WithVideoMode Mode_800x600_RGB8 where
+    withVideoMode cam op = withCameraPtr cam $ \camera -> 
+        (checking $ c'dc1394_video_set_mode camera (toVideoMode Mode_800x600_RGB8)) 
+            >> op (unsafeCoerce cam)
+
+instance WithVideoMode Mode_1280x960_RGB8 where
+    withVideoMode cam op = withCameraPtr cam $ \camera -> 
+        (checking $ c'dc1394_video_set_mode camera (toVideoMode Mode_1280x960_RGB8)) 
+            >> op (unsafeCoerce cam)
+
+getPrimalFrame camera' assumedMode conv = alloca $ \(framePtr :: Ptr (Ptr C'dc1394video_frame_t)) ->
                     withCameraPtr camera' $ \camera -> do
 
     mode <- getMode camera
-    when (mode /= c'DC1394_VIDEO_MODE_640x480_RGB8) $ error "Unsupported mode. Use 640x480 RGB8 for now"
-
+    when (mode /= fromVideoMode assumedMode) $ error "Mode sync error!" 
     c'dc1394_capture_dequeue camera  c'DC1394_CAPTURE_POLICY_WAIT framePtr
     frameP  :: Ptr C'dc1394video_frame_t <- peek framePtr
 
@@ -111,12 +173,41 @@ getFrame camera' = alloca $ \(framePtr :: Ptr (Ptr C'dc1394video_frame_t)) ->
                 case corrupt of
                     0 -> do -- Yay! A frame!
                            dataPtr <- c'dc1394video_frame_t'image <$> (peek framePtr >>= peek)
-                           r <- unsafe8UC_BGRFromPtr (640,480) dataPtr
+                           r <- conv assumedMode dataPtr
                            c'dc1394_capture_enqueue camera frameP
                            return . Just $ r
                     _ -> c'dc1394_capture_enqueue camera frameP >> return Nothing
 
+convertToCVRGB mode dataPtr = case mode of
+   Mode_640x480_RGB8       -> unsafe8UC_BGRFromPtr (640,480)   dataPtr
+   Mode_800x600_RGB8       -> unsafe8UC_BGRFromPtr (800,600)   dataPtr
+   Mode_1024x768_RGB8      -> unsafe8UC_BGRFromPtr (1024,768)  dataPtr
+   Mode_1280x960_RGB8      -> unsafe8UC_BGRFromPtr (1280,960)  dataPtr 
+   Mode_1600x1200_RGB8     -> unsafe8UC_BGRFromPtr (1600,1200) dataPtr
 
+convertToCVMONO8 mode dataPtr = case mode of
+   Mode_640x480_MONO8      -> unsafe8UC_MONOFromPtr (640,480)   dataPtr
+   Mode_800x600_MONO8      -> unsafe8UC_MONOFromPtr (800,600)   dataPtr
+   Mode_1024x768_MONO8     -> unsafe8UC_MONOFromPtr (1024,768)  dataPtr
+   Mode_1280x960_MONO8     -> unsafe8UC_MONOFromPtr (1280,960)  dataPtr
+   Mode_1600x1200_MONO8    -> unsafe8UC_MONOFromPtr (1600,1200) dataPtr
+
+convertToCVMONO16 mode dataPtr = case mode of
+   Mode_640x480_MONO16     -> error "Unsupported video mode"
+   Mode_800x600_MONO16     -> error "Unsupported video mode"
+   Mode_1024x768_MONO16    -> error "Unsupported video mode"
+   Mode_1280x960_MONO16    -> error "Unsupported video mode"
+   Mode_1600x1200_MONO16   -> error "Unsupported video mode"
+
+convertToCVYUV mode dataPtr = case mode of
+   Mode_160x120_YUV444     -> error "Unsupported video mode"
+   Mode_320x240_YUV422     -> error "Unsupported video mode" 
+   Mode_640x480_YUV411     -> error "Unsupported video mode" 
+   Mode_640x480_YUV422     -> error "Unsupported video mode"
+   Mode_800x600_YUV422     -> error "Unsupported video mode"
+   Mode_1024x768_YUV422    -> error "Unsupported video mode"
+   Mode_1280x960_YUV422    -> error "Unsupported video mode"
+   Mode_1600x1200_YUV422   -> error "Unsupported video mode"
 
 getMode :: Ptr C'dc1394camera_t -> IO CInt
 getMode camera = alloca $ \(mode :: Ptr CInt) -> do 
@@ -129,11 +220,12 @@ sizeFromMode camera mode = alloca $ \w -> alloca $ \h -> do
 
 
 -- | Abstract type for cameras
-data Camera = Camera (ForeignPtr C'dc1394camera_t)
+data Camera (mode :: VideoMode) = Camera (ForeignPtr C'dc1394camera_t)
+--type Camera = Camera' Mode_640x480_RGB8
 
 -- | Create Camera from ID. Although the camera type is memory managed, the user is required
 -- to stop data transfer and reset appropriate settings. Finalizers are not quaranteed to run.
-cameraFromID :: DC1394 -> CameraId -> IO Camera
+cameraFromID :: DC1394 -> CameraId -> IO (Camera UnsetMode)
 cameraFromID dc e = do
     let guid = c'dc1394camera_id_t'guid e
     camera <- withDCPtr dc $ \c_dc -> c'dc1394_camera_new c_dc guid
@@ -159,19 +251,19 @@ withDCPtr :: DC1394 -> (Ptr C'dc1394_t -> IO b) -> IO b
 withDCPtr (DC1394 ptr) op = op ptr
 
 -- | Set the video transmission on
-startVideoTransmission :: Camera -> IO ()
+startVideoTransmission :: Camera a -> IO ()
 startVideoTransmission c = withCameraPtr c $ \camera -> checking $ c'dc1394_video_set_transmission camera c'DC1394_ON
 
 -- | Set the video transmission off. Call this when you are done with the camera
-stopVideoTransmission :: Camera -> IO ()
+stopVideoTransmission :: Camera a -> IO ()
 stopVideoTransmission c = withCameraPtr c $ \camera -> checking $ c'dc1394_video_set_transmission camera c'DC1394_OFF
 
 -- | Stop capturing. Call this when you are done with the camera.
-stopCapture :: Camera -> IO ()
+stopCapture :: Camera a -> IO ()
 stopCapture c = withCameraPtr c $ \camera -> checking $ c'dc1394_capture_stop camera
 
 -- | Does the camera have one-shot functionality?
-oneShotCapable :: Camera -> Bool
+oneShotCapable :: Camera a -> Bool
 oneShotCapable camera = unsafePerformIO $ withCamera camera (return . itob . c'dc1394camera_t'one_shot_capable)
 
 -- | Type for capture flags
@@ -189,22 +281,23 @@ fromCF (CF a) = a
 CF a &+ CF b = CF (a .&. b)
 
 -- | Set ISO speed
-setISOSpeed :: Camera -> ISOSpeed -> IO ()
+setISOSpeed :: Camera a -> ISOSpeed -> IO ()
 setISOSpeed c iso = withCameraPtr c $ \camera -> 
     checking $ c'dc1394_video_set_iso_speed camera (fromISO iso)
 
--- | Set the video mode
-setVideoMode :: Camera -> VideoMode -> IO ()
+
+-- | Set the video mode, type-UNSAFE at current point..
+setVideoMode :: Camera a -> VideoMode -> IO ()
 setVideoMode c mode = withCameraPtr c $ \camera -> 
     checking $ c'dc1394_video_set_mode camera (toVideoMode mode)
 
 -- | Set the frame rate
-setFrameRate :: Camera -> Framerate -> IO ()
+setFrameRate :: Camera a -> Framerate -> IO ()
 setFrameRate c rate = withCameraPtr c $ \camera -> 
     checking $ c'dc1394_video_set_framerate camera  (toFramerate rate)
 
 -- | Setup the camera for capturing
-setupCamera :: Camera -> Int -> CaptureFlag -> IO ()
+setupCamera :: Camera a -> Int -> CaptureFlag -> IO ()
 setupCamera c dmaBuffers cf = withCameraPtr c $ \camera -> 
                                checking $ c'dc1394_capture_setup camera 
                                                                  (fromIntegral dmaBuffers) (fromCF cf)
@@ -402,6 +495,7 @@ data VideoMode = Mode_160x120_YUV444
      | Mode_FORMAT7_5  
      | Mode_FORMAT7_6  
      | Mode_FORMAT7_7 
+     | UnsetMode 
       deriving (Show,Eq)
 
 fromVideoMode Mode_160x120_YUV444 = c'DC1394_VIDEO_MODE_160x120_YUV444  
