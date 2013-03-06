@@ -57,7 +57,7 @@ main = withDC1394 $ \dc -> do
     print ("Trying camera", e)
     cam <- cameraFromID dc e-- c'dc1394_camera_new dc guid
     print ("Camera can do oneshots", oneShotCapable cam)
-    setISOSpeed  cam ISO_400
+    setISOSpeed  cam ISO_800
     setVideoMode cam Mode_640x480_RGB8
     setFrameRate cam Rate_7_5
     setupCamera cam 4 (defaultFlags)

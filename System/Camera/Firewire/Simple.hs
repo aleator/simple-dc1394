@@ -17,6 +17,7 @@ module System.Camera.Firewire.Simple (
                 , cameraFromID
                 , setFrameRate 
                 , setISOSpeed 
+                , setOperationMode
                 , withVideoMode 
                 , setupCamera 
                  
@@ -29,6 +30,12 @@ module System.Camera.Firewire.Simple (
                  
                   -- * Camera properties
                 , oneShotCapable 
+                  
+                  -- * Controlling cameras
+                , resetCamera 
+                , resetBus
+                , avtReset
+                , setPower
                  
                   -- * Getting images
                 , getFrame 
@@ -37,6 +44,7 @@ module System.Camera.Firewire.Simple (
                 , DCResult(..)
                 , Framerate(..)
                 , ISOSpeed(..)
+                , OperationMode(..)
                 , VideoMode(..)
 
 
@@ -280,11 +288,51 @@ fromCF (CF a) = a
 (&+) :: CaptureFlag -> CaptureFlag -> CaptureFlag
 CF a &+ CF b = CF (a .&. b)
 
+-- | Set power. True = On, False = Off
+setPower :: Camera a -> Bool -> IO ()
+setPower c state = withCameraPtr c $ \camera -> 
+    checking $ c'dc1394_set_power camera $
+        case state of
+            True -> c'DC1394_ON
+            False -> c'DC1394_OFF
+
 -- | Set ISO speed
 setISOSpeed :: Camera a -> ISOSpeed -> IO ()
 setISOSpeed c iso = withCameraPtr c $ \camera -> 
     checking $ c'dc1394_video_set_iso_speed camera (fromISO iso)
 
+-- | Set operation mode
+data OperationMode = Legacy | B deriving (Eq,Ord,Show)
+
+setOperationMode :: Camera a -> OperationMode -> IO ()
+setOperationMode c mode = withCameraPtr c $ \camera -> 
+    checking $ c'dc1394_video_set_operation_mode camera $
+        case mode of
+            Legacy -> c'DC1394_OPERATION_MODE_LEGACY
+            B      -> c'DC1394_OPERATION_MODE_1394B
+
+getOperationMode :: Camera a -> IO OperationMode
+getOperationMode c = withCameraPtr c $ \camera -> 
+                     alloca $ \modeOut -> do
+                          checking $ c'dc1394_video_get_operation_mode camera modeOut
+                          r <- peek modeOut
+                          if r == c'DC1394_OPERATION_MODE_LEGACY 
+                            then return Legacy 
+                            else return B -- TODO: Make this more secure by adding 'other' case
+                              
+-- | Reset the camera
+resetCamera :: Camera a -> IO ()
+resetCamera c = withCameraPtr c $ \camera -> 
+                 checking $ c'dc1394_camera_reset camera
+-- | Reset the bus
+resetBus :: Camera a -> IO ()
+resetBus c = withCameraPtr c $ \camera -> 
+                 checking $ c'dc1394_reset_bus camera
+
+-- | AVT Reset 
+avtReset :: Camera a -> IO ()
+avtReset c = withCameraPtr c $ \camera -> 
+                 checking $ c'dc1394_avt_reset camera
 
 -- | Set the video mode, type-UNSAFE at current point..
 setVideoMode :: Camera a -> VideoMode -> IO ()
