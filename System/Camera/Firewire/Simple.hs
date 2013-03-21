@@ -36,8 +36,30 @@ module System.Camera.Firewire.Simple (
                 , resetBus
                 , avtReset
                 , setPower
-                , setShutterSpeed
-                 
+                , setGain
+                , setBrightness      
+                , setExposure        
+                , setSharpness       
+                , setHue             
+                , setSaturation      
+                , setGamma           
+                , setShutter         
+                , setGain            
+                , setIris            
+                , setFocus           
+                , setTrigger         
+                , setTriggerDelay    
+--                , setWhiteBalance    
+--                , setTemperature     
+--                , setWhiteShading    
+                , setFeatureFrameRate
+                , setZoom            
+                , setPan             
+                , setTilt            
+                , setOpticalFilter   
+                , setCaptureSize     
+                , setCaptureQuality  
+
                   -- * Getting images
                 , getFrame 
                 , flushBuffer
@@ -354,12 +376,36 @@ setupCamera c dmaBuffers cf = withCameraPtr c $ \camera ->
 
 -- | Set camera shutter speed
 
-setShutterSpeed :: Camera a -> Word32 -> IO ()
-setShutterSpeed c speed = withCameraPtr c $ \camera -> 
+setFeature :: CUInt -> Camera a -> Word32 -> IO ()
+setFeature f c speed = withCameraPtr c $ \camera -> 
                                checking $ c'dc1394_feature_set_value
                                             camera
-                                            c'DC1394_FEATURE_SHUTTER 
+                                            f
                                             (fromIntegral speed)
+
+setBrightness       = setFeature c'DC1394_FEATURE_BRIGHTNESS
+setExposure         = setFeature c'DC1394_FEATURE_EXPOSURE
+setSharpness        = setFeature c'DC1394_FEATURE_SHARPNESS
+setHue              = setFeature c'DC1394_FEATURE_HUE
+setSaturation       = setFeature c'DC1394_FEATURE_SATURATION
+setGamma            = setFeature c'DC1394_FEATURE_GAMMA
+setShutter          = setFeature c'DC1394_FEATURE_SHUTTER
+setGain             = setFeature c'DC1394_FEATURE_GAIN
+setIris             = setFeature c'DC1394_FEATURE_IRIS
+setFocus            = setFeature c'DC1394_FEATURE_FOCUS
+setTrigger          = setFeature c'DC1394_FEATURE_TRIGGER
+setTriggerDelay     = setFeature c'DC1394_FEATURE_TRIGGER_DELAY
+setFeatureFrameRate = setFeature c'DC1394_FEATURE_FRAME_RATE
+setZoom             = setFeature c'DC1394_FEATURE_ZOOM
+setPan              = setFeature c'DC1394_FEATURE_PAN
+setTilt             = setFeature c'DC1394_FEATURE_TILT
+setOpticalFilter    = setFeature c'DC1394_FEATURE_OPTICAL_FILTER
+setCaptureSize      = setFeature c'DC1394_FEATURE_CAPTURE_SIZE
+setCaptureQuality   = setFeature c'DC1394_FEATURE_CAPTURE_QUALITY
+-- These are multiple valued and cannot be set as features
+-- setWhiteBalance     = setFeature c'DC1394_FEATURE_WHITE_BALANCE
+-- setWhiteShading     = setFeature c'DC1394_FEATURE_WHITE_SHADING
+-- setTemperature      = setFeature c'DC1394_FEATURE_TEMPERATURE
  
 
 -- | Execute a libdc1394 function and check for the error code. Currently raises the error as 
