@@ -36,6 +36,7 @@ module System.Camera.Firewire.Simple (
                 , resetBus
                 , avtReset
                 , setPower
+                , setShutterSpeed
                  
                   -- * Getting images
                 , getFrame 
@@ -57,6 +58,7 @@ import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Data.Bits
+import Data.Word
 import Foreign.C.Types
 import Foreign.Concurrent
 import Foreign.ForeignPtr hiding (newForeignPtr)
@@ -92,9 +94,9 @@ flushBuffer cam = alloca $ \(framePtrPtr :: Ptr (Ptr C'dc1394video_frame_t)) -> 
  where
     flushLoop framePtrPtr cam = do
         c'dc1394_capture_dequeue cam  c'DC1394_CAPTURE_POLICY_POLL framePtrPtr
-        print "Flush!"
+--        print "Flush!"
         framePtr  :: Ptr C'dc1394video_frame_t <- peek framePtrPtr 
-        putStrLn $ show (framePtr,framePtrPtr)
+--        putStrLn $ show (framePtr,framePtrPtr)
         
         when (framePtr /= nullPtr) $ c'dc1394_capture_enqueue cam framePtr >> flushLoop framePtrPtr cam
 
@@ -291,7 +293,7 @@ CF a &+ CF b = CF (a .&. b)
 -- | Set power. True = On, False = Off
 setPower :: Camera a -> Bool -> IO ()
 setPower c state = withCameraPtr c $ \camera -> 
-    checking $ c'dc1394_set_power camera $
+    checking $ c'dc1394_camera_set_power camera $
         case state of
             True -> c'DC1394_ON
             False -> c'DC1394_OFF
@@ -349,6 +351,16 @@ setupCamera :: Camera a -> Int -> CaptureFlag -> IO ()
 setupCamera c dmaBuffers cf = withCameraPtr c $ \camera -> 
                                checking $ c'dc1394_capture_setup camera 
                                                                  (fromIntegral dmaBuffers) (fromCF cf)
+
+-- | Set camera shutter speed
+
+setShutterSpeed :: Camera a -> Word32 -> IO ()
+setShutterSpeed c speed = withCameraPtr c $ \camera -> 
+                               checking $ c'dc1394_feature_set_value
+                                            camera
+                                            c'DC1394_FEATURE_SHUTTER 
+                                            (fromIntegral speed)
+ 
 
 -- | Execute a libdc1394 function and check for the error code. Currently raises the error as 
 --   UserError, but in future might provide a more reasonable error hierarchy.
